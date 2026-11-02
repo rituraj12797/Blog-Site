@@ -7,6 +7,68 @@ summary: First part of the building your own time series database series, discus
 ---
 
 
+Background 
+
+Lately I have been working on creating a simple time series database from scratch to understand these systems in a more detailed way. This blog series of "Building your own Time series database from scratch" is an attempt to share the learnings I accumulate along the way
+
+1. LSM Tree
+
+There majority of databases uses B/B+ Tree or LSM-Tree or their variations as their core data structure to store data depending on the use case, LSM-Tree in particular is used to store data in a way which is generally optimized for write heavy workloads.
+Unlike B/B+ Tree, LSM-Tree is not actually a tree but rather a multi component data structure where LSM stands for 'Log Structured Merge', each of these 3 keywords define the 3 core properties of it which are:
+
+ 1 Log: LSM-Trees are mostly designed with appennd-only logic, meaning any mutable action on the database creates a new entry instead of modifying the existing one in-place, for example deletes and updates do not modify the existing data but rather create a new entry
+ 
+ 2 Structured: The data is stored in a strictly organized and structured way, it is first stored in primary memory inside a sorted dictionary data structure and then flushed to the disk in the samen manner, so that during reads t he system could use binary search or indexes to quickly locate the data instead of scanning whole database.
+
+ 3 Merge: Because data is written as an append-only log, the system will inevitably end up with multiple versions of the same data spread across different disk files (Ex- an insert in file 1, an update in file 2, and a delete in file 3). To fix this, a background process called compaction takes these separate sorted files and combines them using a merge sort algorithm.
+
+2. Why LSM-Tree 
+
+Time series databases are primarily used for analyzing and ingesting large volumes of timestamped data at an extremely high rate without choking, some usecases include, storing ticker data for a stock from the financial market, or ingesting telemetry data for observability. In many use case the rate at which this data is produced is extremely fast and LSM-Tree is a widely recognized data structure for this specific use case.
+
+many modern analytical databases often uses a variation of LSM-Tree based storage engines, to handle high rates of ingestion, some example include: 
+
+ 1. ScylllaDB: Uses a shard-per-core architecture combined with a Log-Structured Merge-tree to maximize performance.
+ 2. VictoriaMetrics: A high performance time series data base useed for monitoring internally it relies on Merge-Tree based storage engine which is a variation of LSM-Tree.
+ 3. ClickHouse: A fast analytical database which uses Merge-Tree internally as a part of it's storage engine.
+ 4. RocksDB: Key value store developed by meta for write heavy scenarios.
 
 
-<LSM_Read />
+
+
+## 3. Componnents of a LSM-Tree
+
+Talking about the components, there are multiple parts which work together to make a LSM-Tree, operating across both primary memory and secondary memory as  shown in the illustration below. The core components of an LSM-Tree are it's Memtable, SSTable, WAL and the compaction allgorithm, one-by-one we will take a look at the detaillings og each of these components.
+
+<LSM_Components />
+
+
+### 1. Memtable
+
+In my opinion memtable is unarguablly the most important part of a LSM-Tree, one can think of it as the in-memory, dictionary data structure(key-value) which keeps data in a sorted way. This is where every write/delete/update request lands and appends a new entry to, one of the major responsibility of this data structure is to store the incoming entries in a sorted manner and eventually when the memtable is full we flush this memtable into the secondary memory as a SST.
+
+Memtable is the also the landing point for read queries, if the data is not found in the memtable only then it moves forward to locate it in the rest of the database, and this gives us a scope of optimization on the read path, what if we can quickly and correctly predict if a key does "NOT" exist in the memtable, if you also thought about using a bloom filter then you are right, we can maintain a bloom filter for our memtable and before and before searching the memtable we would use the bloom filter to check "if the data certainly doesn't exist or not", if the is exist, means the result could be a false positive and now we would check for the data inside the memtable.
+<LSM_Memtable />
+Based on these properties there are multiple data structures that could be used as a memtable such as B/B+ Tre, Red-Black Tree, Skip-List or an AVL-Tree. I was particularly more oriented towards building a concurrent version of a lockfree Skip-List to be used as memtable in my database.
+
+
+### 2. SSTable 
+
+This one stands for "Sorted String Table", these are chunks that store data in the secondary memory and are created by the flushing of the memtable when it reaches it capacity
+
+### 3. Write Ahead Log
+
+### 4. Compaction algorithm
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -8,6 +8,9 @@ import TableWrapper from './TableWrapper'
 
 import LSM_Write from './Making_Your_Own_TSDB/LSM_Write'
 import LSM_Read from './Making_Your_Own_TSDB/LSM_Read'
+import LSM_Components from './Making_Your_Own_TSDB/LSM_Components'
+import LSM_Memtable from './Making_Your_Own_TSDB/LSM_Memtable'
+
 
 export const components: MDXComponents = {
   Image,
@@ -18,4 +21,6 @@ export const components: MDXComponents = {
   BlogNewsletterForm,
   LSM_Write,
   LSM_Read,
+  LSM_Components,
+  LSM_Memtable
 }
