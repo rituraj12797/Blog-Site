@@ -5,8 +5,9 @@ import type { MDXComponents } from 'mdx/types'
 import Image from './Image'
 import CustomLink from './Link'
 import TableWrapper from './TableWrapper'
-import LSM from './LSMTree'
 
+import LSM_Write from './Making_Your_Own_TSDB/LSM_Write'
+import LSM_Read from './Making_Your_Own_TSDB/LSM_Read'
 
 export const components: MDXComponents = {
   Image,
@@ -15,5 +16,6 @@ export const components: MDXComponents = {
   pre: Pre,
   table: TableWrapper,
   BlogNewsletterForm,
-  LSM,
+  LSM_Write,
+  LSM_Read,
 }

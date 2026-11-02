@@ -1,10 +1,10 @@
 {
-  "general": 1,
   "database": 1,
   "storage-system": 1,
-  "cloud": 2,
-  "system-design": 2,
+  "general": 1,
   "c": 2,
   "low-level": 2,
-  "operating-systems": 2
+  "operating-systems": 2,
+  "cloud": 2,
+  "system-design": 2
 }
