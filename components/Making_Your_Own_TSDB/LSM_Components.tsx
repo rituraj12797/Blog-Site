@@ -18,28 +18,15 @@ const LSMTreeStatic = () => {
                     </h3>
 
                     <div className="flex gap-10 mr-4">
-                        {/* Bloom Filter mock */}
-                        <div>
-                            <div className="text-[10px] mb-2 text-gray-400 dark:text-gray-500 font-medium tracking-wide">BLOOM FILTER</div>
-                            <div className="flex gap-2">
-                                {[0, 0, 0, 0, 1, 0, 1, 0].map((v, i) => (
-                                    <div
-                                        key={i}
-                                        className={`w-6 h-6 rounded transition-colors duration-300 ${v
-                                            ? 'bg-gray-400 dark:bg-gray-600'
-                                            : 'bg-white dark:bg-transparent border border-gray-200 dark:border-gray-700'
-                                            }`}
-                                    ></div>
-                                ))}
-                            </div>
-                        </div>
-
                         {/* Dictionary mock */}
                         <div>
-                            <div className="text-[10px] mb-2 text-gray-400 dark:text-gray-500 font-medium tracking-wide">DICTIONARY (2/4)</div>
                             <div className="flex gap-2.5 text-gray-500 dark:text-gray-400">
                                 <div className="w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center rounded font-medium text-sm">5</div>
                                 <div className="w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center rounded font-medium text-sm">6</div>
+                                <div className="w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center rounded font-medium text-sm">10</div>
+                                <div className="w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center rounded font-medium text-sm">12</div>
+                                <div className="w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center rounded font-medium text-sm">16</div>
+                                <div className="w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center rounded font-medium text-sm">26</div>
                                 <div className="w-10 h-10 border border-dashed border-gray-200 dark:border-gray-700 rounded"></div>
                                 <div className="w-10 h-10 border border-dashed border-gray-200 dark:border-gray-700 rounded"></div>
                             </div>

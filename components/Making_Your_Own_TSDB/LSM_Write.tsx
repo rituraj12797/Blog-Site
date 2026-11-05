@@ -160,7 +160,7 @@ export default function LSMTreeVisualizer() {
 
       {/* Header & Controls */}
       <div className="flex justify-between items-center px-2 min-h-[60px] relative z-10">
-        <h3 className="text-xl font-bold m-0 opacity-90">LSM Tree Flow</h3>
+        <h3 className="text-xl font-bold m-0 opacity-90">LSM-Tree</h3>
 
         <div className="flex gap-3">
           <button onClick={handleClear} className="px-5 py-2.5 rounded-full font-semibold shadow-md transition-all duration-300 active:scale-95 bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200">
@@ -306,7 +306,7 @@ export default function LSMTreeVisualizer() {
                       height: `${Math.min(64, 32 + (table.sizeMultiplier - 1) * 8)}px`
                     }}
                   >
-                    SST x{table.sizeMultiplier}
+                    SST
                   </div>
                 ))}
               </div>
