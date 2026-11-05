@@ -9,89 +9,106 @@ summary: First part of the building your own time series database series, discus
 
 Background 
 
-Lately I have been studying more about database internals from the last 3 4 months and finally I decided to  make a simple time series database from scratch to understand these systems in a more detailed way, along the way I got to learn so many interesting things and so I am starting this series of "Making your own Time Series database from scratch" in an attempt to share my learnings findings and decission making with the community. This is the first part of it where we discus about LSM-Tree which is teh core of this project.
+This summer, during a conversation around databases with one of my mentors, I realised that while I had a fairly good understanding of B/B+ Trees, I knew very little about LSM-Trees and how awesome they are. That's why lately I have been studying more about database internals and after a lot of procrastination I finally decided to make a simple time series database from scratch to understand these systems in more detail.
 
-1. LSM Tree
+This series "Making Your Own Time Series Database" is a result of me going through 3–4 months of planning, multiple impostor cycles, several discussions with my friend Chahat Sagar, some really good articles and great deep dives on DB internals and is an attempt to share what I've been learning and building. This is the first part, where we dig into the LSM-Tree, which is the core data structure powering the whole thing.
 
-There majority of databases uses B/B+ Tree or LSM-Tree or their variations as their core data structure to store data depending on the use case, LSM-Tree in particular is used to store data in a way which is generally optimized for write heavy workloads.
-Unlike B/B+ Tree, LSM-Tree is not actually a tree but rather a multi component data structure where LSM stands for 'Log Structured Merge', each of these 3 keywords define the 3 core properties of it which are:
 
- 1 Log: LSM-Trees are mostly designed with appennd-only logic, meaning any mutable action on the database creates a new entry instead of modifying the existing one in-place, for example deletes and updates do not modify the existing data but rather create a new entry
+## 1. LSM Tree
+
+There are thousands of databases in the world and majority of them use either B/B+ Tree or LSM-Tree or their variations as their core data structure to store data depending on the use case.
+LSM-Tree in particular is used to store data in a way which is generally optimized for write heavy workloads.
+
+Unlike B/B+ Tree, LSM-Tree is not actually a tree but rather a multi component data structure where LSM stands for 'Log Structured Merge', each of these 3 keywords defines the 3 core properties of it which are:
+
+#### 1) Log
+LSM-Trees are mostly designed with append-only logic, meaning any mutable action on the database creates a new entry instead of modifying the existing one in-place, for example deletes and updates do not modify the existing data but rather create a new entry.
  
- 2 Structured: The data is stored in a strictly organized and structured way, it is first stored in primary memory inside a sorted dictionary data structure and then flushed to the disk in the samen manner, so that during reads t he system could use binary search or indexes to quickly locate the data instead of scanning whole database.
+#### 2) Structured
+The data is stored in a strictly organized and structured way, it is first stored in primary memory inside a sorted dictionary data structure and then flushed to the disk in the same manner.
+Leveraging this, during reads the system could use binary search or indexes to quickly locate the data instead of scanning the whole database.
 
- 3 Merge: Because data is written as an append-only log, the system will inevitably end up with multiple versions of the same data spread across different disk files (Ex- an insert in file 1, an update in file 2, and a delete in file 3). To fix this, a background process called compaction takes these separate sorted files and combines them using a merge sort algorithm.
+#### 3) Merge
+Because data is written as an append-only log, the system will inevitably end up with multiple versions of the same data spread across different disk files (e.g. an insert in file 1, an update in file 2, and a delete in file 3). To fix this, a background process called compaction takes these separate sorted files and combines them using a merge sort algorithm.
 
-2. Why LSM-Tree 
+## 2. Why LSM-Tree 
 
-Time series databases are primarily used for analyzing and ingesting large volumes of timestamped data at an extremely high rate without choking, some usecases include, storing ticker data for a stock from the financial market, or ingesting telemetry data for observability. In many use case the rate at which this data is produced is extremely fast and LSM-Tree is a widely recognized data structure for this specific use case.
+Time series databases are primarily used for analyzing and ingesting large volumes of timestamped data at an extremely high rate without choking. Some applications include storing ticker data for a stock from the financial market or ingesting telemetry data for observability. 
 
-many modern analytical databases often uses a variation of LSM-Tree based storage engines, to handle high rates of ingestion, some example include: 
+In many use cases, the rate at which this data is produced is extremely fast, and LSM-Tree is a widely recognized data structure for this specific purpose.
 
- 1. ScylllaDB: Uses a shard-per-core architecture combined with a Log-Structured Merge-tree to maximize performance.
- 2. VictoriaMetrics: A high performance time series data base useed for monitoring internally it relies on Merge-Tree based storage engine which is a variation of LSM-Tree.
- 3. ClickHouse: A fast analytical database which uses Merge-Tree internally as a part of it's storage engine.
- 4. RocksDB: Key value store developed by meta for write heavy scenarios.
+Many modern analytical databases often use a variation of LSM-Tree-based storage engines, a few of which are: 
+
+ 1. ScyllaDB: Uses a shard-per-core architecture combined with a Log-Structured Merge-tree to maximize performance.
+ 2. VictoriaMetrics: A high-performance time series database used for monitoring. Internally it relies on a Merge-Tree-based storage engine which is a variation of LSM-Tree.
+ 3. ClickHouse: A fast analytical database which uses Merge-Tree internally as a part of its storage engine.
+ 4. RocksDB: Key-Value store developed by Meta for write-heavy scenarios.
 
 
+## 3. Components of an LSM-Tree
 
-
-## 3. Componnents of a LSM-Tree
-
-Talking about the components, there are multiple parts which work together to make a LSM-Tree, operating across both primary memory and secondary memory as  shown in the illustration below. The core components of an LSM-Tree are it's Memtable, SSTable, WAL and the compaction allgorithm, one-by-one we will take a look at the detaillings og each of these components.
+Talking about the components, there are multiple parts which work together to make an LSM-Tree, operating across both primary memory and secondary memory as  shown in the illustration below. The core components of an LSM-Tree are its memtable, SSTable, WAL and the compaction algorithm, one-by-one we will take a look at the detais of each of these components.
 
 <LSM_Components />
 
 
 ### 1. Memtable
 
-In my opinion memtable is unarguablly the most important part of a LSM-Tree, one can think of it as the in-memory, dictionary data structure(key-value) which maintains incoming data in a sorted way, they are kept small in size, usually in order of mega bytes.
+In my opinion memtable is unarguably the most important part of an LSM-Tree, one can think of it as the in-memory data structure which 
+1. Can store key value data and behave as a dictionary
+2. maintains incoming data in a sorted order.
 
-This is where every write/delete/update request lands and appends a new entry to, one of the major responsibility of this data structure is to store the incoming entries in a sorted manner and eventually when the memtable is full we flush this memtable into the secondary memory as a SST.
+Based on these properties there are multiple data structures that could be used as a memtable such as B/B+ Tree, Red-Black Tree, Skip-List or an AVL-Tree. 
 
-it is the also the starting point for read queries, if the data is not found in the memtable, only then it moves forward to locate it in the rest of the database, and this gives us a scope of optimization on the read path, what if we can quickly and correctly predict if a key does "NOT" exist in the memtable, if you also thought about using a bloom filter then you are rigt, if you don't know what a bloom filter is you can read about it [here](https://chahatsagar.substack.com/p/i-wanted-to-understand-bloom-filters) , we can maintain a bloom filter for our memtable and before and before searching the memtable we would use the bloom filter to check "if the data certainly doesn't exist or not", if the is exist, means the result could be a false positive and now we would check for the data inside the memtable.
-<LSM_Memtable />
+At first I was particularly more oriented towards using B/B+ Tree due to their superior read performance, however I was aiming at making the memtable so that It will support concurrent writes and reads on a lock free manner for better performance and after I went through a few papers I quickly realized correctly making a lock free version of B/B+ Tree is notoriously difficult, since it involves cascaded node splitting which is a complex multistep process, so instead I pivoted to use Skip-List as the data structure for my memtable as making a lock free version of it is simpler and provides similar performance.
 
-Based on these properties there are multiple data structures that could be used as a memtable such as B/B+ Tre, Red-Black Tree, Skip-List or an AVL-Tree. I was particularly more oriented towards building a concurrent version of a lockfree Skip-List to be used as memtable in my database.
+Memtables are where every write/delete/update request lands and appends a new entry to, one of the major responsibility of this is to store the incoming entries in a sorted manner and eventually when the memtable is full we flush this memtable into the secondary memory as a SST.
+
+It is also the starting point for read queries, read queries start from finding the data in the memtable and if the data is not found in the memtable, only then it moves forward to locate it in the data which lies in the secondary memory in form of SStables.
 
 
 ### 2. SSTable 
 
-This one stands for "Sorted String Table", in simple terms one can think of SSTs as immutable chunks of data that is persisted in secondary memory i.e when a memtable reaches it's capacity the sorted data inside it is flushed into the secondary memory too be persisted in form of a sorted string table.
+This one stands for "Sorted String Table", in simple terms one can think of SSTs as immutable chunks of data that is persisted in secondary memory i.e when a memtable reaches its capacity the sorted data inside it is flushed into the secondary memory to get persisted in form of a sorted string table.
 
-SSTs can have multiple sub-components inside them. In most implementations you’ll find the following parts:
+Now because SSTs exist in secondary memory, we add several additional pieces to it along with the data in order to make searching faster and that's why it has multiple sub-components inside them. In most implementations you’ll find the following parts:
 
 <LSM_SST />
+
+#### Bloom filter
+In simple terms these are probabilistic data structures that are generally used to quickly check "non existence" of an entity (key in our case) in a set. If you want to know more about internal workings of it [here](https://chahatsagar.substack.com/p/i-wanted-to-understand-bloom-filters) is an exceptional blog for you to read.
+
+Inside each SSTable, we maintain a bloom filter that records which keys are present in it, and this is used to speed up search as during searching we can just load and check the bloom filter for a certain key and skip the SStable if the key "does not exist" which is way faster than loading all of the data in memory and then checking, we will see later why this helps.
+
+
 #### Sparse Index Table
 A small index that stores the file offset of every N‑th key, used to speed up reads. When a lookup is performed, the engine first reads the sparse index, determines the nearest offset, and then scans only that short slice of the data table.
 
 #### Data Table 
 It is the sequence of complete data that was flushed from the memtable. Since this data is sorted in terms of key, a simple binary search can be used to locate a key in O(log N) time.
 
-#### Bloom filter
-These are SSTable level bloom filters that records which keys are present in it, again used to speed up search as it can correctly predict if a particular entry "does not" exist in the SSTable without actually traversing over the keys.
-
 #### Meta Data 
 A small footer that contains global information about the SSTable, such as:
- Total file size
- Minimum and maximum key stored
- Offsets to the sparse index, data block, and bloom filter
- Compression scheme, checksum, etc.
+Total file size
+Minimum and maximum key stored
+Offsets to the sparse index, data block, and bloom filter
+Compression scheme, checksum, etc.
 
-When a Memtable fills up, its sorted entries are flushed to disk as a new SSTable.
-If we kept doing this without any further organization we would quickly end up with thousands of SSTables, which makes reads expensive because the engine would have to probe many files.
+When a Memtable fills up, its sorted entries are structured into a Data Table, and from this the Bloom filter, Sparse Index, and Meta Data footer are built and packaged together, forming a complete SSTable that is then flushed to disk. All three are constructed at flush time, not maintained incrementally during writes.
 
-To avoid this, LSM‑based storage groups SSTables into levels as shown below, level 0 contains freshly flushed SSTables, after a certain threshold compaction occours and a level 1 SSTable is created from several level 0 SSTables, similarly aafter a certain threshold level 1 SSTables are compacted into a level 2 SSTable and so on, we will take a batter look at compaction and it's details in later section.
+But if we kept doing this without any further organization we would quickly end up with thousands of SSTables, which makes reads expensive because the engine would have to probe many files.
+
+To avoid this, LSM‑based storage groups SSTables into levels as shown below, level 0 contains freshly flushed SSTables, after a certain threshold compaction occurs and a level 1 SSTable is created from several level 0 SSTables, similarly after a certain threshold level 1 SSTables are compacted into a level 2 SSTable and so on, we will take a better look at compaction and its details in later section.
 
 <LSM_TSST />
 
 ### 3. Write Ahead Log
 
-This is a log file in the secondary memory which we use for crash recovery, basically whenever we do a mutable operation like Write/Update/Delete on the data base, we maintain a record of it so that if the database dies before flush we should be able to recover/rebuild the memtable. 
+This is a log file in the secondary memory which we use for crash recovery, basically whenever we do a mutable operation like Write/Update/Delete on the database, we maintain a record of it so that if the database dies before flush we should be able to recover/rebuild the memtable. When the database restarts after a crash, it reads the WAL from the beginning and replays every logged operation in order, rebuilding the Memtable back to the state it was in before the crash. Once replay is complete, the database resumes normal operation as if nothing happened.
 
-But if we are we going to fsync each operation to WAL before applying it on the memtable isn't it going to affect write throughput ? and the answer is yes. but if a crash ever happens and the memtable was not flushed, we can guaruntee recoverability upto the last succesfull operation so data recoverability/safety here is maximum.
+But if we are going to `fsync` each operation to WAL before applying it on the memtable isn't it going to affect write throughput ? and the answer is yes. but if a crash ever happens and the memtable was not flushed, we can guarantee recoverability up to the last successful operation so data recoverability/safety here is maximum.
 
-This is a tradeoff between performance and data safety guaruntee which could be understood form the below table: 
+This is a tradeoff between performance and data safety guarantee which could be understood from the below table: 
 
 | Strategy | How it works | Write‑performance impact | Data‑safety guarantee |
 |----------|--------------|--------------------------|------------------------|
@@ -99,22 +116,21 @@ This is a tradeoff between performance and data safety guaruntee which could be 
 | **No WAL** | Modify the Memtable directly | Very fast, no extra I/O | If a crash occurs, the entire Memtable is lost |
 | **Batched WAL** | Append entries to the OS page‑cache, then flush them in batches (e.g., every 1 s or every N operations) | minimal most of the time; occasional sync when the batch is flushed | Guarantees durability up to the **batch window** (e.g., 1 s or N ops) |
 
-The choice for batch window depends on use case and may vary across databases. For examplle InfluxDB calls fsync on every write, Cassandra keeps it at 10 second, whille VictoriaMetrics does not use WAL at all, however for my specific case, I am plannign on keepign WAL with a batched flushing setup to ensure both recoverability and performance.
+The choice for batch window depends on use case and may vary across databases. For example InfluxDB calls fsync on every write, Cassandra keeps it at 10 second, while VictoriaMetrics does not use WAL at all, however for my specific case, I am planning on keeping WAL with a batched flushing setup to ensure both recoverability and performance.
 
-
-there is no numerical or direct relationship between data safety guaruntee and write throughput but for illlustration purpose we can understand it from the below graph.
+There is no numerical or direct relationship between data safety guarantee and write throughput but for illustration purpose we can understand it from the below graph.
 
 <LSM_WAL />
 
 
-## 4. Compaction Scheme  
+### 4. Compaction Scheme  
 
 Compaction is a process which runs whenever a level of SSTables becomes full. Its purpose is to merge several SSTables into fewer, larger ones using a merge‑sort‑like algorithm so that:
 
 * Redundant entries created by the append‑only write path (updates → new rows, deletes → tombstones) are eliminated.  
 * Disk space in the current level is reclaimed.
 
-Below I have attatched a visualization that shows why append only design results in data redundancy and how compaction is used to address this issue.
+Below I have attached a visualization that shows why append-only design results in data redundancy and how compaction is used to address this issue.
 
 <LSM_Compaction />
 
@@ -127,7 +143,7 @@ Below I have attatched a visualization that shows why append only design results
 4. **Write‑out** - The merged result is stored as new SSTable(s) in the next level (L1, L2 …).  
 5. **Clean‑up** - Old SSTables are deleted, reclaiming space.
 
-There exists multiple strategies for compaction depending on desired outcomes and use case, however there are 2 main widely adapted strategies for compaction which are: 
+There exist multiple strategies for compaction depending on desired outcomes and use case, however there are 2 main widely adapted strategies for compaction which are: 
 
 1. **Leveled compaction** - Guarantees non‑overlapping SSTables in each level while also cleaning up redundant entries. This usually causes higher write amplification, but it keeps reads fast. I personally find it more interesting and  am going to use it in my database implementation.
 
@@ -135,23 +151,24 @@ There exists multiple strategies for compaction depending on desired outcomes an
 
 These two descriptions are only introductory. A full article is required to cover the details of each strategy, their tuning knobs, and their impact on performance. I’ll leave the deeper discussion for later.
 
-Now that we know how each underlying component of a LSM tree works, it's time we discuss how these parts work together to address read and write queries in a an LSM-Tree based storage engine.
+Now that we know how each underlying component of an LSM tree works, it's time we discuss how these parts work together to address read and write queries in an LSM-Tree based storage engine.
 
 
 ## 4. Write Path
 
-Writes in an LSM-Tree is a multi step process that roughly follows the following path: 
+Writes in an LSM-Tree are a multi-step process that roughly follows the following path: 
 
-1. Write query comes in. 
-2. The query is logged in OS cache
-3. Operation is applied on Memtable and bloom filter
-4. When the OS page cache reaches it's capacity, logs are flushes into the WAL file
-5. When the memtable reaches it's capacity, it is flushed along with the bloomfilter to create a new SS table in level 0
-6. When a particular level reaches it's threshold for the number of sstables allowed, it undergoes compaction. 
+1. Write(Insert/Delete/Update) query comes in. 
+2. The query is logged in OS cache.
+3. Entry is inserted into the Memtable.
+4. When the OS page cache reaches its capacity, logs are flushed into the WAL file.
+5. When the memtable reaches its capacity, it's data is flushed along with a newly created sparse index table and bloom filter to create a new SSTable in level 0.
+
+6. When a particular level reaches its threshold for the number of SSTables allowed, it undergoes compaction. 
 
 Below is a minimal LSM-Tree setup I have created to help you visualize this, it comes with the following specifications: 
 
-* WAL batch threshold - 2 operattions
+* WAL batch threshold - 2 operations
 * Memtable size - 4 entries 
 * Compaction threshold - 3 SSTables 
 
@@ -162,24 +179,20 @@ Give it a try.
 
 ## 5. Read Path
 
-Reads in LSM-Trees are actually quite straightforward once you understand one simple fact "LSM-Trees are append-only". What this means for reads is that the latest version of any data always lives at the top of the hierarchy. The Memtable holds the most recent writes, Level-0 SSTables hold slightly older data, and as you go deeper into the levels the data gets progressively older. So when we're looking for a key, we start at the top and work our way down, the first match we find is guaranteed to be the latest version, and we stop right there.
+Reads in LSM-Trees are actually quite straightforward once you understand one simple fact - "LSM-Trees are append-only". What this means for reads is that the latest version of any data always lives at the top of the hierarchy. The Memtable holds the most recent writes, Level-0 SSTables hold slightly older data, and as you go deeper into the levels the data gets progressively older. So when we're looking for a key, we start at the top and work our way down. The first match we find is guaranteed to be the latest version, and we stop right there.
 
-The read order is:  
-1. Step 1 : Read in memtable
-2. Step 2 : Set level L as 0
-3. Step 3 : If not found seach the level L SSTables in newest to oldest SSTables
-4. Step 4 : If not found increment L and go to Step 2.
-5. Step 5 : If the data is located or L goesgreater than threshold of levels, stop.
+The read path in a nutshell is:  
+1. Find the key in memtable.
+2. Set level L as 0.
+3. Search the SSTables of level L in the order of newest to oldest SSTables.
+4. If not found increment L and go to Step 3.
+5. If the data is located or L goes beyond the limit, stop.
 
-
-The reason we search within each level in newest-to-oldest order is the same — since SSTables within a level were created at different points in time, the newer ones may contain more recent updates for the same key.
-
+Within each level, newer SSTables are searched first because they were created later and are more likely to hold the most recent version of a key.
 
 ### Searching the Memtable
 
-We first run the key through the Bloom filter to check if the key certainly does not exist there. If the Bloom filter says no, we skip the Memtable entirely. Only if it says "probably yes" do we actually search inside it.
-
-This is a small but powerful trick for queries where the data simply doesn't exist in the Memtable we avoid a lookup entirely and move on faster.
+This is quite simple, since it is an in-memory dictionary it allows us to quickly check if a particular key exists or not in plain O(log N) complexity and that's why no Bloom filter is needed here because we're already in memory. If the key exists then we return the associated value else we move to checking for the key in SSTables. 
 
 ### Searching an SSTable
 
@@ -187,10 +200,10 @@ If the key wasn't found in the Memtable, we move on to the SSTables. The main ch
 
 Here's the approach:
 
-1. Read the footer (Meta Data) - The footer contains byte offsets of the Bloom filter and Sparse Index Table inside the file. We load only these two.
+1. Read the footer (Meta Data) - The footer contains byte offsets of the Bloom filter and Sparse Index Table inside the file. We load only these two in memory.
 2. Check the Bloom filter - Run the key through the SSTable's Bloom filter. If the key certainly doesn't exist, we skip this SSTable.
 3. Use the Sparse Index to narrow the range - If the key probably exists, we look up the nearest indexed key in the Sparse Index Table to get an approximate byte offset in the data table.
-4. Load only that memory page - Using that offset, we fetch just the specific page of the data table where the key should live. This way we only pull the most necessary slice of data from disk into memory, keeping I/O minimal.
+4. Load only that memory page - Using that offset, we fetch just the specific page of the data table where the key should live. This way we only pull the most necessary slice of data from disk into memory, keeping Disk I/O minimal.
 5. Scan the page - Since data within an SSTable is sorted, we do a quick scan or binary search over that small page to find our key.
 
 If the key isn't found in this SSTable, we move on to the next one in the same level, and then to the next level if needed. If we exhaust all levels without a match, we return "not found."
@@ -200,11 +213,22 @@ Below is a visualization of the Read Path in an LSM-Tree, working on the exact s
 
 <LSM_Read />
 
-While this is the case for point queries looking up a single key. Range queries or aggregations are nto this simple, accumulating the correct range of data across multiple SSTables and levels in the fewest possible steps involves more advanced algorithms, and that in itself is a topic worthy of its own article which I'll try to write later.
+This is the case for point queries looking for a single key. Range queries or aggregations are not this simple as accumulating the correct range of data across multiple SSTables and levels in the fewest possible steps involves more advanced algorithms, and that in itself is a topic worthy of its own article which I'll try to write later.
 
 
 ## 6. Conclusion
-Now that we know the basic working mechanism and internals about the LSM tree, in the next series of blogs we will have deeper discussions around building each of these components the decssion making behind the scenes and the learning I derived form the process.
 
-Next Part: We talk about building the memtable which primarily involves
+At this point we've covered the full internals of an LSM-Tree, how it stores data, how it recovers from crashes, how it cleans up after itself, and how reads and writes actually flow through it. If you've made it this far, you now understand the core of what powers most modern write-heavy databases.
+
+A few resources I found genuinely useful along the way, in case you want to go deeper:
+
+1. *Database Internals* by Alex Petrov - specifically Chapter 7.
+2. [Log-Structured Merge-trees - optimizing for writes in databases](https://www.youtube.com/watch?v=aZ5rHyCN328&t=3s) — one of the best explanations of LSM-Trees out there, by Ben Dicken.
+3. [How do Time Series Databases Work?](https://www.youtube.com/watch?v=Qd76ZmfRs_Q) - though I am not a fan of interview-prep content in general, but this one by HelloInterview is genuinely good.
+
+**Next up:** We take everything we just discussed and use it to design our own time series database, component choices, trade-offs, and what makes our use case different.
+
+Thanks for reading. Here's a fun fact to close out:
+
+*"PostgreSQL originally included a native 'Time Travel' feature that let you query data as it existed at any point in the past, it was removed in 1998 because the database never forgot anything, causing severe data bloat."*
 

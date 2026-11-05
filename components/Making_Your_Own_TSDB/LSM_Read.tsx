@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 const BLOOM_SIZE = 16;
 const hash = (key: number) => Math.abs(Math.imul(key, 2654435761) >>> 28) % BLOOM_SIZE;
@@ -18,38 +18,52 @@ interface SSTableData {
     bloom: number[];
 }
 
+// 8 entries in Memtable (Direct O(log N) RAM index lookup)
 const MOCK_MEMTABLE = [92, 93, 94, 95, 96, 97, 98, 99];
-const MEMTABLE_BLOOM = createBloom(MOCK_MEMTABLE);
 
 const MOCK_LEVELS: SSTableData[][] = [
-    // Level 0 (5 sorted entries)
+    // Level 0 (5 entries each)
     [
         { id: 'sst-l0-1', name: 'SST #1', data: [80, 82, 84, 86, 88], bloom: createBloom([80, 82, 84, 86, 88]) },
         { id: 'sst-l0-2', name: 'SST #2', data: [85, 87, 89, 90, 91], bloom: createBloom([85, 87, 89, 90, 91]) },
     ],
-    // Level 1 (7 sorted entries)
+    // Level 1 (7 entries each)
     [
         { id: 'sst-l1-1', name: 'SST #3', data: [50, 52, 54, 56, 58, 60, 62], bloom: createBloom([50, 52, 54, 56, 58, 60, 62]) },
         { id: 'sst-l1-2', name: 'SST #4', data: [30, 32, 34, 36, 38, 40, 42], bloom: createBloom([30, 32, 34, 36, 38, 40, 42]) },
     ],
 ];
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// Speed multipliers (Base default slowed down by an extra 0.5x)
+const SPEED_CONFIG: Record<string, number> = {
+    '0.5x': 2.0,
+    '1x': 1.0,
+    '2x': 0.5,
+};
 
 export default function LSMTreeReadVisualizer() {
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [isSearching, setIsSearching] = useState(false);
+    const [speed, setSpeed] = useState<'0.5x' | '1x' | '2x'>('1x');
+
+    // Ref keeps track of the active speed multiplier dynamically during async sleep
+    const speedRef = useRef<number>(SPEED_CONFIG['1x']);
+
+    const handleSpeedChange = (newSpeed: '0.5x' | '1x' | '2x') => {
+        setSpeed(newSpeed);
+        speedRef.current = SPEED_CONFIG[newSpeed];
+    };
+
+    // Base sleep multiplier: slowed by an additional 1.5x factor by default
+    const sleep = (baseMs: number) =>
+        new Promise((resolve) => setTimeout(resolve, baseMs * 1.5 * speedRef.current));
 
     // Animation states
     const [activeContainer, setActiveContainer] = useState<string | null>(null);
-    const [activeSubstep, setActiveSubstep] = useState<'footer' | 'load_meta' | 'check_bloom' | 'check_index' | 'load_page' | 'scan_page' | null>(null);
-    const [bloomFailed, setBloomFailed] = useState<boolean>(false);
+    const [activeSubstep, setActiveSubstep] = useState<'footer' | 'bloom' | 'index' | 'data' | null>(null);
+    const [bloomFailedContainer, setBloomFailedContainer] = useState<string | null>(null);
     const [traversedContainers, setTraversedContainers] = useState<string[]>([]);
     const [statusText, setStatusText] = useState<string>('');
-
-    // Primary Memory Staging Buffer State
-    const [ramLoadedMeta, setRamLoadedMeta] = useState<{ sstName: string } | null>(null);
-    const [ramLoadedPage, setRamLoadedPage] = useState<number[]>([]);
 
     // Result states
     const [searchResult, setSearchResult] = useState<'found' | 'not-found' | null>(null);
@@ -65,127 +79,118 @@ export default function LSMTreeReadVisualizer() {
         setSearchResult(null);
         setFoundData(null);
         setTraversedContainers([]);
-        setBloomFailed(false);
-        setRamLoadedMeta(null);
-        setRamLoadedPage([]);
+        setBloomFailedContainer(null);
 
         const currentHash = hash(key);
 
         // ----------------------------------------------------
-        // STEP 1: MEMTABLE SEARCH (IN-MEMORY RAM)
+        // MEMTABLE SEARCH (Direct in-memory index scan)
         // ----------------------------------------------------
         setActiveContainer('memtable');
-        setActiveSubstep('check_bloom');
-        setStatusText('RAM: Checking Memtable Bloom Filter...');
-        await sleep(400);
+        setActiveSubstep('data');
+        setStatusText('RAM: Searching Memtable directly (in-memory lookup)...');
+        await sleep(450);
 
-        if (MEMTABLE_BLOOM[currentHash] === 1) {
-            setActiveSubstep('scan_page');
-            setStatusText('RAM: Bloom hit. Scanning Memtable...');
-            await sleep(400);
-
-            if (MOCK_MEMTABLE.includes(key)) {
-                setSearchResult('found');
-                setFoundData({ container: 'memtable', key });
-                setStatusText(`Found key ${key} in Memtable!`);
-                setIsSearching(false);
-                return;
-            }
-        } else {
-            setStatusText('RAM: Bloom miss. Key not in Memtable.');
-            await sleep(300);
+        if (MOCK_MEMTABLE.includes(key)) {
+            setSearchResult('found');
+            setFoundData({ container: 'memtable', key });
+            setStatusText(`Found key ${key} in Memtable!`);
+            setIsSearching(false);
+            return;
         }
 
+        setStatusText('RAM: Key not found in Memtable. Probing Disk SSTables...');
+        await sleep(350);
         setTraversedContainers((prev) => [...prev, 'memtable']);
         setActiveSubstep(null);
 
         // ----------------------------------------------------
-        // STEP 2: SECONDARY MEMORY (SSTABLES VIA RAM BUFFER)
+        // SECONDARY MEMORY (SSTABLE LEVEL BY LEVEL)
         // ----------------------------------------------------
         for (let l = 0; l < MOCK_LEVELS.length; l++) {
             for (const sst of MOCK_LEVELS[l]) {
                 setActiveContainer(sst.id);
-                setBloomFailed(false);
-                setRamLoadedMeta(null);
-                setRamLoadedPage([]);
 
-                // 1. Read Footer
+                // 1. Read Footer (Meta Data)
                 setActiveSubstep('footer');
-                setStatusText(`Disk (${sst.name}): Step 1 - Reading Meta Data footer...`);
+                setStatusText(`Disk (${sst.name}): Reading Meta Data footer...`);
                 await sleep(350);
 
-                // 2. Load Bloom Filter & Sparse Index into RAM
-                setActiveSubstep('load_meta');
-                setRamLoadedMeta({ sstName: sst.name });
-                setStatusText(`RAM Cache: Step 2 - Loaded ${sst.name} Bloom Filter & Sparse Index into RAM!`);
-                await sleep(450);
-
-                // 3. Check Bloom Filter in RAM
-                setActiveSubstep('check_bloom');
-                setStatusText(`RAM Cache: Probing Bloom Filter for key ${key}...`);
-                await sleep(400);
+                // 2. Check Bloom Filter
+                setActiveSubstep('bloom');
+                setStatusText(`Disk (${sst.name}): Checking Bloom Filter...`);
+                await sleep(350);
 
                 if (sst.bloom[currentHash] === 0) {
-                    setBloomFailed(true);
-                    setStatusText(`RAM Cache: Bloom negative! Key certainly absent. Evicting from RAM...`);
-                    await sleep(500);
+                    setBloomFailedContainer(sst.id);
+                    setStatusText(`Disk (${sst.name}): Bloom miss (key absent). Skipping table.`);
+                    await sleep(400);
                     setTraversedContainers((prev) => [...prev, sst.id]);
-                    setRamLoadedMeta(null);
                     setActiveSubstep(null);
                     continue;
                 }
 
-                // 4. Query Sparse Index in RAM
-                setActiveSubstep('check_index');
-                setStatusText(`RAM Cache: Step 3 - Bloom hit! Sparse Index narrowed page range.`);
-                await sleep(450);
+                // 3. Sparse Index Lookup
+                setActiveSubstep('index');
+                setStatusText(`Disk (${sst.name}): Bloom hit. Querying Sparse Index...`);
+                await sleep(350);
 
-                // 5. Pull only 2 neighbouring keys into RAM
-                setActiveSubstep('load_page');
-                let sliceIdx = sst.data.findIndex((k) => k >= key);
-                if (sliceIdx === -1) sliceIdx = sst.data.length - 2;
-                else if (sliceIdx > sst.data.length - 2) sliceIdx = sst.data.length - 2;
-                if (sliceIdx < 0) sliceIdx = 0;
-
-                const targetSlice = sst.data.slice(sliceIdx, sliceIdx + 2);
-                setRamLoadedPage(targetSlice);
-                setStatusText(`RAM Cache: Step 4 - Pulled target 2-key slice [${targetSlice.join(', ')}] from Disk!`);
-                await sleep(550);
-
-                // 6. Scan page in RAM
-                setActiveSubstep('scan_page');
-                setStatusText(`RAM Cache: Step 5 - Scanning memory slice...`);
+                // 4 & 5. Load Data Page & Scan
+                setActiveSubstep('data');
+                setStatusText(`Disk (${sst.name}): Scanning Data Sequence...`);
                 await sleep(400);
 
-                if (targetSlice.includes(key)) {
+                if (sst.data.includes(key)) {
                     setSearchResult('found');
                     setFoundData({ container: sst.id, key });
-                    setStatusText(`Success: Found key ${key} in ${sst.name}!`);
+                    setStatusText(`Found key ${key} in ${sst.name}!`);
                     setIsSearching(false);
                     return;
                 }
 
-                // Clean up RAM slot for next iteration
-                await sleep(350);
                 setTraversedContainers((prev) => [...prev, sst.id]);
-                setRamLoadedMeta(null);
-                setRamLoadedPage([]);
                 setActiveSubstep(null);
             }
         }
 
-        // Finished without finding
+        // Not found anywhere
         setActiveContainer(null);
         setActiveSubstep(null);
-        setRamLoadedMeta(null);
-        setRamLoadedPage([]);
         setSearchResult('not-found');
-        setStatusText(`Key ${key} does not exist in database.`);
+        setStatusText(`Key ${key} does not exist in the database.`);
         setIsSearching(false);
     };
 
     return (
-        <div className="relative flex flex-col gap-8 py-8 w-full max-w-6xl mx-auto bg-transparent font-sans text-black dark:text-white transition-colors duration-300">
+        <div className="relative flex flex-col gap-8 py-8 w-full max-w-5xl mx-auto bg-transparent font-sans text-black dark:text-white transition-colors duration-300">
+
+            {/* Top Header Row with Speed Selection on Top-Right */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-xl font-bold uppercase tracking-widest text-black dark:text-white">
+                        LSM Read Path
+                    </h2>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">
+                        Hierarchical Key Lookup Flow
+                    </p>
+                </div>
+
+                {/* Speed Controls */}
+                <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-800 rounded-lg p-1 shadow-sm">
+                    {(['0.5x', '1x', '2x'] as const).map((s) => (
+                        <button
+                            key={s}
+                            onClick={() => handleSpeedChange(s)}
+                            className={`px-3 py-1 text-xs font-bold rounded transition-colors ${speed === s
+                                    ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
+                                    : 'text-gray-500 hover:text-black dark:hover:text-white'
+                                }`}
+                        >
+                            {s}
+                        </button>
+                    ))}
+                </div>
+            </div>
 
             {/* Search Input Bar */}
             <div className="flex flex-col items-center gap-3">
@@ -208,7 +213,7 @@ export default function LSMTreeReadVisualizer() {
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         disabled={isSearching}
-                        placeholder="Enter key (e.g. 95, 84, 56, 999)"
+                        placeholder="Enter key (e.g. 95, 88, 56, 999)"
                         className="flex-1 px-5 py-2.5 rounded-full border-2 border-gray-300 dark:border-gray-800 bg-white dark:bg-black focus:outline-none focus:border-[#001f7a] dark:focus:border-white transition-colors text-base font-mono"
                     />
                     <button
@@ -232,150 +237,61 @@ export default function LSMTreeReadVisualizer() {
                 </div>
             </div>
 
-            {/* PRIMARY MEMORY (RAM): Memtable + RAM Staging Slot */}
-            <div className="relative p-6 border-2 border-dashed border-gray-300 dark:border-gray-800 rounded-2xl flex flex-col gap-4">
+            {/* Memory (RAM) */}
+            <div
+                className={`relative p-6 border-2 border-dashed rounded-2xl transition-all duration-300 flex justify-center ${activeContainer === 'memtable'
+                        ? 'border-gray-800 dark:border-gray-200 bg-gray-50/50 dark:bg-gray-950/20'
+                        : 'border-gray-300 dark:border-gray-800'
+                    }`}
+            >
                 <span className="absolute -top-3 left-4 px-2 bg-white dark:bg-black text-xs font-bold uppercase tracking-widest text-gray-500">
-                    Primary Memory (RAM)
+                    Memory (RAM)
                 </span>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-
-                    {/* 1. Memtable (7 cols) */}
-                    <div
-                        className={`lg:col-span-7 relative p-4 border-2 rounded-xl transition-all duration-300 flex flex-col justify-between ${traversedContainers.includes('memtable')
-                                ? 'border-gray-300 dark:border-gray-800 opacity-40'
-                                : activeContainer === 'memtable'
-                                    ? 'border-black dark:border-white bg-white dark:bg-black shadow-lg'
-                                    : 'border-gray-300 dark:border-gray-800 bg-transparent'
-                            }`}
-                    >
-                        <span className="absolute -top-3 left-4 px-2 bg-white dark:bg-black text-[11px] font-bold uppercase tracking-widest text-gray-700 dark:text-gray-300">
-                            Memtable
-                        </span>
-
-                        <div className="flex items-center gap-4 mt-1">
-                            <div
-                                className={`px-3 py-2 border rounded-md text-xs font-mono font-bold uppercase transition-all duration-300 ${activeContainer === 'memtable' && activeSubstep === 'check_bloom'
-                                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/30 text-primary-500 ring-2 ring-primary-500/50 scale-105'
-                                        : 'border-gray-200 dark:border-gray-800 text-gray-400'
-                                    }`}
-                            >
-                                Bloom Filter
-                            </div>
-
-                            <div className="w-px h-8 bg-gray-200 dark:bg-gray-800" />
-
-                            <div
-                                className={`flex flex-wrap gap-1.5 p-1.5 rounded-lg transition-all duration-300 ${activeContainer === 'memtable' && activeSubstep === 'scan_page'
-                                        ? 'bg-primary-50/50 dark:bg-primary-950/20 ring-2 ring-primary-500/50'
-                                        : ''
-                                    }`}
-                            >
-                                {MOCK_MEMTABLE.map((val) => {
-                                    const isFound = foundData?.container === 'memtable' && val === foundData.key;
-                                    return (
-                                        <div
-                                            key={val}
-                                            className={`w-9 h-9 rounded-md flex items-center justify-center font-mono text-xs font-bold transition-all duration-300 border ${isFound
-                                                    ? 'bg-green-500 border-green-600 text-white scale-110 shadow-lg z-10'
-                                                    : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-black text-black dark:text-white'
-                                                }`}
-                                        >
-                                            {val}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 2. RAM Staging Buffer (OS Page Cache Slot) (5 cols) */}
-                    <div
-                        className={`lg:col-span-5 relative p-4 border-2 border-dashed rounded-xl transition-all duration-300 flex flex-col justify-between ${ramLoadedMeta
-                                ? 'border-primary-500/80 bg-primary-50/10 dark:bg-primary-950/20'
+                <div
+                    className={`relative px-7 py-5 border-2 rounded-xl transition-all duration-300 flex flex-col items-center gap-3 ${traversedContainers.includes('memtable')
+                            ? 'border-gray-300 dark:border-gray-800 opacity-40'
+                            : activeContainer === 'memtable'
+                                ? 'border-black dark:border-white bg-white dark:bg-black shadow-lg scale-[1.01]'
                                 : 'border-gray-300 dark:border-gray-800 bg-transparent'
+                        }`}
+                >
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-2 bg-white dark:bg-black text-xs font-bold uppercase tracking-widest text-gray-700 dark:text-gray-300">
+                        Memtable
+                    </span>
+
+                    {/* 8 sorted items in Memtable */}
+                    <div
+                        className={`flex flex-wrap gap-2 p-2 rounded-lg transition-all duration-300 ${activeContainer === 'memtable' && activeSubstep === 'data'
+                                ? 'bg-primary-50/50 dark:bg-primary-950/20 ring-2 ring-primary-500/50'
+                                : ''
                             }`}
                     >
-                        <span className="absolute -top-3 left-4 px-2 bg-white dark:bg-black text-[11px] font-bold uppercase tracking-widest text-primary-500">
-                            RAM Staging Buffer (OS Page Cache)
-                        </span>
-
-                        {ramLoadedMeta ? (
-                            <div className="flex flex-col gap-2.5 mt-1 animate-in fade-in duration-300">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-mono text-gray-400 uppercase font-bold">
-                                        Target: {ramLoadedMeta.sstName}
-                                    </span>
-                                    {activeSubstep === 'load_page' && (
-                                        <span className="text-[9px] font-mono text-primary-500 uppercase font-bold animate-pulse">
-                                            Pulling Page...
-                                        </span>
-                                    )}
+                        {MOCK_MEMTABLE.map((val) => {
+                            const isFound = foundData?.container === 'memtable' && val === foundData.key;
+                            return (
+                                <div
+                                    key={val}
+                                    className={`w-11 h-11 rounded-lg flex items-center justify-center font-mono text-sm font-bold transition-all duration-300 border ${isFound
+                                            ? 'bg-green-500 border-green-600 text-white scale-110 shadow-lg z-10'
+                                            : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-black text-black dark:text-white'
+                                        }`}
+                                >
+                                    {val}
                                 </div>
-
-                                <div className="flex items-center gap-2">
-                                    {/* Bloom Filter loaded in RAM */}
-                                    <div
-                                        className={`flex-1 py-1.5 px-2 rounded border text-center font-mono text-[10px] uppercase font-bold transition-all duration-300 ${activeSubstep === 'check_bloom'
-                                                ? bloomFailed
-                                                    ? 'border-red-500 bg-red-500/10 text-red-500 ring-2 ring-red-500/50'
-                                                    : 'border-primary-500 bg-primary-500/20 text-primary-500 ring-2 ring-primary-500/50 scale-105'
-                                                : 'border-gray-300 dark:border-gray-700 text-gray-400'
-                                            }`}
-                                    >
-                                        Bloom Filter
-                                    </div>
-
-                                    {/* Sparse Index loaded in RAM */}
-                                    <div
-                                        className={`flex-1 py-1.5 px-2 rounded border text-center font-mono text-[10px] uppercase font-bold transition-all duration-300 ${activeSubstep === 'check_index'
-                                                ? 'border-primary-500 bg-primary-500/20 text-primary-500 ring-2 ring-primary-500/50 scale-105'
-                                                : 'border-gray-300 dark:border-gray-700 text-gray-400'
-                                            }`}
-                                    >
-                                        Sparse Index
-                                    </div>
-                                </div>
-
-                                {/* Pulled 2 Neighbouring Keys Slot */}
-                                <div className="flex items-center gap-2 pt-1 border-t border-gray-200 dark:border-gray-800">
-                                    <span className="text-[9px] font-mono uppercase text-gray-400 font-bold">Data Page:</span>
-                                    <div className="flex gap-2">
-                                        {ramLoadedPage.length > 0 ? (
-                                            ramLoadedPage.map((val) => {
-                                                const isFound = foundData && val === foundData.key;
-                                                return (
-                                                    <div
-                                                        key={val}
-                                                        className={`px-2.5 py-1 rounded border font-mono text-xs font-bold transition-all duration-300 ${isFound
-                                                                ? 'bg-green-500 border-green-600 text-white scale-110 shadow-lg'
-                                                                : 'border-primary-500 bg-white dark:bg-black text-black dark:text-white'
-                                                            }`}
-                                                    >
-                                                        K:{val}
-                                                    </div>
-                                                );
-                                            })
-                                        ) : (
-                                            <span className="text-[10px] font-mono text-gray-400 italic">No page loaded</span>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="h-full flex items-center justify-center">
-                                <span className="text-[11px] font-mono text-gray-400 italic">
-                                    Empty / Awaiting SSTable Offsets
-                                </span>
-                            </div>
-                        )}
+                            );
+                        })}
                     </div>
-
                 </div>
             </div>
 
-            {/* SECONDARY MEMORY (DISK) */}
-            <div className="relative p-6 border-2 border-dashed border-gray-300 dark:border-gray-800 rounded-2xl flex flex-col gap-6">
+            {/* Secondary Memory (Disk) */}
+            <div
+                className={`relative p-6 border-2 border-dashed rounded-2xl transition-all duration-300 flex flex-col gap-6 ${activeContainer && activeContainer !== 'memtable'
+                        ? 'border-gray-800 dark:border-gray-200 bg-gray-50/50 dark:bg-gray-950/20'
+                        : 'border-gray-300 dark:border-gray-800'
+                    }`}
+            >
                 <span className="absolute -top-3 left-4 px-2 bg-white dark:bg-black text-xs font-bold uppercase tracking-widest text-gray-500">
                     Secondary Memory (Disk)
                 </span>
@@ -390,6 +306,7 @@ export default function LSMTreeReadVisualizer() {
                             {levelTables.map((sst) => {
                                 const isCurrent = activeContainer === sst.id;
                                 const isTraversed = traversedContainers.includes(sst.id);
+                                const isBloomMiss = bloomFailedContainer === sst.id;
 
                                 return (
                                     <div
@@ -401,51 +318,50 @@ export default function LSMTreeReadVisualizer() {
                                                     : 'border-gray-300 dark:border-gray-800 bg-transparent'
                                             }`}
                                     >
-                                        {/* Top Row: Bloom Filter (w), Sparse Index (w), Data Sequence (8w) */}
+                                        {/* TOP ROW: Height H with 3 horizontal components (w + w + 8w) */}
                                         <div className="flex flex-row gap-2.5 p-3 h-20 items-center">
 
-                                            {/* 1. Bloom Filter */}
+                                            {/* 1. Bloom Filter (width: w) */}
                                             <div
-                                                className={`flex-[1] h-full rounded-lg border flex items-center justify-center p-1.5 text-center transition-all duration-300 ${isCurrent && (activeSubstep === 'load_meta' || activeSubstep === 'check_bloom')
-                                                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/40 text-primary-500 font-bold scale-105'
+                                                className={`flex-[1] h-full rounded-lg border flex items-center justify-center p-1.5 text-center transition-all duration-300 ${isCurrent && activeSubstep === 'bloom'
+                                                        ? isBloomMiss
+                                                            ? 'border-red-500 bg-red-500/10 text-red-500 font-bold ring-2 ring-red-500/50'
+                                                            : 'border-primary-500 bg-primary-50 dark:bg-primary-950/40 text-primary-500 font-bold ring-2 ring-primary-500/50 scale-105'
                                                         : 'border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-black text-gray-400'
                                                     }`}
                                             >
                                                 <span className="text-[11px] font-bold uppercase font-mono leading-tight">
-                                                    Bloom Filter
+                                                    Bloom
                                                 </span>
                                             </div>
 
-                                            {/* 2. Sparse Index Table */}
+                                            {/* 2. Sparse Index Table (width: w) */}
                                             <div
-                                                className={`flex-[1] h-full rounded-lg border flex items-center justify-center p-1.5 text-center transition-all duration-300 ${isCurrent && (activeSubstep === 'load_meta' || activeSubstep === 'check_index')
-                                                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/40 text-primary-500 font-bold scale-105'
+                                                className={`flex-[1] h-full rounded-lg border flex items-center justify-center p-1.5 text-center transition-all duration-300 ${isCurrent && activeSubstep === 'index'
+                                                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/40 text-primary-500 font-bold ring-2 ring-primary-500/50 scale-105'
                                                         : 'border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-black text-gray-400'
                                                     }`}
                                             >
                                                 <span className="text-[11px] font-bold uppercase font-mono leading-tight">
-                                                    Sparse Index
+                                                    Index
                                                 </span>
                                             </div>
 
-                                            {/* 3. Data Sequence */}
+                                            {/* 3. Data Sequence (width: 8w, 5 items in L0 / 7 items in L1) */}
                                             <div
-                                                className={`flex-[8] h-full rounded-lg border flex items-center px-3 gap-2 overflow-x-auto no-scrollbar transition-all duration-300 ${isCurrent && (activeSubstep === 'load_page' || activeSubstep === 'scan_page')
-                                                        ? 'border-primary-500/80 bg-primary-50/20 dark:bg-primary-950/20'
+                                                className={`flex-[8] h-full rounded-lg border flex items-center px-3 gap-2 overflow-x-auto no-scrollbar transition-all duration-300 ${isCurrent && activeSubstep === 'data'
+                                                        ? 'border-primary-500/80 bg-primary-50/20 dark:bg-primary-950/20 ring-2 ring-primary-500/50'
                                                         : 'border-gray-200 dark:border-gray-800 bg-gray-50/30 dark:bg-black'
                                                     }`}
                                             >
                                                 {sst.data.map((val) => {
-                                                    const isBeingPulled = isCurrent && ramLoadedPage.includes(val);
                                                     const isFound = foundData?.container === sst.id && val === foundData.key;
                                                     return (
                                                         <div
                                                             key={val}
                                                             className={`flex-1 min-w-[52px] h-11 flex items-center justify-center rounded-md border text-sm font-mono font-bold transition-all duration-300 ${isFound
                                                                     ? 'bg-green-500 border-green-600 text-white scale-110 shadow-lg z-10'
-                                                                    : isBeingPulled
-                                                                        ? 'border-primary-500 ring-2 ring-primary-500/50 bg-primary-50 dark:bg-primary-950/40 text-primary-500 font-bold scale-105'
-                                                                        : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-black text-black dark:text-white'
+                                                                    : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-black text-black dark:text-white'
                                                                 }`}
                                                         >
                                                             <span>K:{val}</span>
@@ -456,7 +372,7 @@ export default function LSMTreeReadVisualizer() {
 
                                         </div>
 
-                                        {/* Bottom Row: Meta Data Footer */}
+                                        {/* BOTTOM ROW: Clean Meta Data Footer */}
                                         <div
                                             className={`h-7 border-t flex items-center justify-center px-4 transition-all duration-300 ${isCurrent && activeSubstep === 'footer'
                                                     ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/50 text-primary-600 dark:text-primary-400 font-bold'

@@ -223,15 +223,6 @@ export default function LSMTreeVisualizer() {
             </div>
 
             <div className={`flex flex-col gap-2 items-center transition-all duration-500 ${isAnimatingMemtable ? 'translate-y-8 opacity-0' : 'translate-y-0 opacity-100'}`}>
-              <span className="text-[9px] font-semibold opacity-70 uppercase tracking-wider">Bloom Filter</span>
-              <div className="flex gap-1">
-                {activeBloom.map((bit, i) => (
-                  <div key={i} className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-mono transition-colors duration-300 ${bit ? 'bg-black text-white dark:bg-[#001f7a] dark:text-white shadow-sm' : 'border border-[#001f7a]/30 dark:border-white/30 bg-transparent text-transparent'
-                    }`}>
-                    {bit}
-                  </div>
-                ))}
-              </div>
             </div>
 
             <div className={`flex flex-col gap-2 items-center transition-all duration-500 ${isAnimatingMemtable ? '-translate-y-8 opacity-0' : 'translate-y-0 opacity-100'}`}>
