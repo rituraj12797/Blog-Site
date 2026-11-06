@@ -58,6 +58,7 @@
   color utility to any element that depends on these defaults.
 */
 @layer base {
+
   *,
   ::after,
   ::before,
@@ -81,41 +82,115 @@
 
 @layer utilities {
   .prose {
+    font-size: 1.125rem;
+    /* 1.125x — bump up from default prose base */
+
+    /* Override typography plugin CSS variables for light mode */
+    --tw-prose-body: var(--color-gray-900);
+    --tw-prose-headings: var(--color-gray-900);
+    --tw-prose-lead: var(--color-gray-700);
+    --tw-prose-bold: var(--color-gray-900);
+    --tw-prose-counters: var(--color-gray-600);
+    --tw-prose-bullets: var(--color-gray-600);
+    --tw-prose-quotes: var(--color-gray-900);
+    --tw-prose-captions: var(--color-gray-600);
+
     & a {
       color: var(--color-primary-500);
+
       &:hover {
         color: var(--color-primary-600);
       }
+
       & code {
         color: var(--color-primary-400);
       }
     }
+
     & :where(h1, h2) {
       font-weight: 700;
       letter-spacing: var(--tracking-tight);
     }
+
     & h3 {
       font-weight: 600;
     }
+
     & :where(code):not(pre code) {
       color: var(--color-indigo-500);
     }
   }
 
   .prose-invert {
-    & a {
-      color: var(--color-primary-500);
+    /* Override typography plugin CSS variables for dark mode */
+    --tw-prose-invert-body: var(--color-gray-50);
+    --tw-prose-invert-headings: white;
+    --tw-prose-invert-lead: var(--color-gray-200);
+    --tw-prose-invert-bold: white;
+    --tw-prose-invert-counters: var(--color-gray-300);
+    --tw-prose-invert-bullets: var(--color-gray-400);
+    --tw-prose-invert-quotes: var(--color-gray-100);
+    --tw-prose-invert-captions: var(--color-gray-400);
+
+    /* Fallback direct color override */
+    color: var(--color-gray-50);
+
+    & p,
+    & li,
+    & td,
+    & blockquote,
+    & dt,
+    & dd {
+      color: var(--color-gray-50);
+    }
+
+    & a {      color: var(--color-primary-500);
+
       &:hover {
         color: var(--color-primary-400);
       }
+
       & code {
         color: var(--color-primary-400);
       }
     }
+
     & :where(h1, h2, h3, h4, h5, h6) {
       color: var(--color-gray-100);
     }
   }
+}
+
+/*
+  Force white prose text in dark mode.
+  Placed outside @layer so it wins the cascade over the typography plugin.
+*/
+.dark .prose p,
+.dark .prose li,
+.dark .prose td,
+.dark .prose th,
+.dark .prose dt,
+.dark .prose dd,
+.dark .prose blockquote,
+.dark .prose strong,
+.dark .prose em,
+.dark .prose ul,
+.dark .prose ol,
+.dark .prose h1,
+.dark .prose h2,
+.dark .prose h3,
+.dark .prose h4,
+.dark .prose h5,
+.dark .prose h6,
+.dark .prose thead th,
+.dark .prose tbody td {
+  color: var(--color-gray-50);
+}
+
+/* List markers (numbers and bullets) */
+.dark .prose ol > li::marker,
+.dark .prose ul > li::marker {
+  color: var(--color-gray-50);
 }
 
 .task-list-item::before {
@@ -143,8 +218,10 @@
 }
 
 .no-scrollbar {
-  -ms-overflow-style: none; /* IE and Edge */
-  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
 }
 
 /* https://stackoverflow.com/questions/61083813/how-to-avoid-internal-autofill-selected-style-to-be-applied */
