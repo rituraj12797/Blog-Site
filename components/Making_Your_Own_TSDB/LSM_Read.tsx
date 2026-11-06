@@ -182,8 +182,8 @@ export default function LSMTreeReadVisualizer() {
                             key={s}
                             onClick={() => handleSpeedChange(s)}
                             className={`px-3 py-1 text-xs font-bold rounded transition-colors ${speed === s
-                                    ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
-                                    : 'text-gray-500 hover:text-black dark:hover:text-white'
+                                ? 'bg-black dark:bg-white text-white dark:text-black shadow-sm'
+                                : 'text-gray-500 hover:text-black dark:hover:text-white'
                                 }`}
                         >
                             {s}
@@ -213,15 +213,15 @@ export default function LSMTreeReadVisualizer() {
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         disabled={isSearching}
-                        placeholder="Enter key (e.g. 95, 88, 56, 999)"
+                        placeholder="Key"
                         className="flex-1 px-5 py-2.5 rounded-full border-2 border-gray-300 dark:border-gray-800 bg-white dark:bg-black focus:outline-none focus:border-[#001f7a] dark:focus:border-white transition-colors text-base font-mono"
                     />
                     <button
                         type="submit"
                         disabled={isSearching || !searchQuery}
                         className={`px-7 py-2.5 rounded-full font-bold text-base shadow-md transition-all duration-300 active:scale-95 ${isSearching || !searchQuery
-                                ? 'bg-gray-300 dark:bg-gray-800 text-gray-500 cursor-not-allowed'
-                                : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90 cursor-pointer'
+                            ? 'bg-gray-300 dark:bg-gray-800 text-gray-500 cursor-not-allowed'
+                            : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90 cursor-pointer'
                             }`}
                     >
                         Search
@@ -240,8 +240,8 @@ export default function LSMTreeReadVisualizer() {
             {/* Memory (RAM) */}
             <div
                 className={`relative p-6 border-2 border-dashed rounded-2xl transition-all duration-300 flex justify-center ${activeContainer === 'memtable'
-                        ? 'border-gray-800 dark:border-gray-200 bg-gray-50/50 dark:bg-gray-950/20'
-                        : 'border-gray-300 dark:border-gray-800'
+                    ? 'border-gray-800 dark:border-gray-200 bg-gray-50/50 dark:bg-gray-950/20'
+                    : 'border-gray-300 dark:border-gray-800'
                     }`}
             >
                 <span className="absolute -top-3 left-4 px-2 bg-white dark:bg-black text-xs font-bold uppercase tracking-widest text-gray-500">
@@ -250,10 +250,10 @@ export default function LSMTreeReadVisualizer() {
 
                 <div
                     className={`relative px-7 py-5 border-2 rounded-xl transition-all duration-300 flex flex-col items-center gap-3 ${traversedContainers.includes('memtable')
-                            ? 'border-gray-300 dark:border-gray-800 opacity-40'
-                            : activeContainer === 'memtable'
-                                ? 'border-black dark:border-white bg-white dark:bg-black shadow-lg scale-[1.01]'
-                                : 'border-gray-300 dark:border-gray-800 bg-transparent'
+                        ? 'border-gray-300 dark:border-gray-800 opacity-40'
+                        : activeContainer === 'memtable'
+                            ? 'border-black dark:border-white bg-white dark:bg-black shadow-lg scale-[1.01]'
+                            : 'border-gray-300 dark:border-gray-800 bg-transparent'
                         }`}
                 >
                     <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-2 bg-white dark:bg-black text-xs font-bold uppercase tracking-widest text-gray-700 dark:text-gray-300">
@@ -263,8 +263,8 @@ export default function LSMTreeReadVisualizer() {
                     {/* 8 sorted items in Memtable */}
                     <div
                         className={`flex flex-wrap gap-2 p-2 rounded-lg transition-all duration-300 ${activeContainer === 'memtable' && activeSubstep === 'data'
-                                ? 'bg-primary-50/50 dark:bg-primary-950/20 ring-2 ring-primary-500/50'
-                                : ''
+                            ? 'bg-primary-50/50 dark:bg-primary-950/20 ring-2 ring-primary-500/50'
+                            : ''
                             }`}
                     >
                         {MOCK_MEMTABLE.map((val) => {
@@ -273,8 +273,8 @@ export default function LSMTreeReadVisualizer() {
                                 <div
                                     key={val}
                                     className={`w-11 h-11 rounded-lg flex items-center justify-center font-mono text-sm font-bold transition-all duration-300 border ${isFound
-                                            ? 'bg-green-500 border-green-600 text-white scale-110 shadow-lg z-10'
-                                            : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-black text-black dark:text-white'
+                                        ? 'bg-green-500 border-green-600 text-white scale-110 shadow-lg z-10'
+                                        : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-black text-black dark:text-white'
                                         }`}
                                 >
                                     {val}
@@ -288,8 +288,8 @@ export default function LSMTreeReadVisualizer() {
             {/* Secondary Memory (Disk) */}
             <div
                 className={`relative p-6 border-2 border-dashed rounded-2xl transition-all duration-300 flex flex-col gap-6 ${activeContainer && activeContainer !== 'memtable'
-                        ? 'border-gray-800 dark:border-gray-200 bg-gray-50/50 dark:bg-gray-950/20'
-                        : 'border-gray-300 dark:border-gray-800'
+                    ? 'border-gray-800 dark:border-gray-200 bg-gray-50/50 dark:bg-gray-950/20'
+                    : 'border-gray-300 dark:border-gray-800'
                     }`}
             >
                 <span className="absolute -top-3 left-4 px-2 bg-white dark:bg-black text-xs font-bold uppercase tracking-widest text-gray-500">
@@ -312,10 +312,10 @@ export default function LSMTreeReadVisualizer() {
                                     <div
                                         key={sst.id}
                                         className={`flex-1 flex flex-col border-2 rounded-xl overflow-hidden transition-all duration-300 ${isTraversed
-                                                ? 'border-gray-300 dark:border-gray-800 opacity-40 grayscale-[40%]'
-                                                : isCurrent
-                                                    ? 'border-black dark:border-white shadow-lg'
-                                                    : 'border-gray-300 dark:border-gray-800 bg-transparent'
+                                            ? 'border-gray-300 dark:border-gray-800 opacity-40 grayscale-[40%]'
+                                            : isCurrent
+                                                ? 'border-black dark:border-white shadow-lg'
+                                                : 'border-gray-300 dark:border-gray-800 bg-transparent'
                                             }`}
                                     >
                                         {/* TOP ROW: Height H with 3 horizontal components (w + w + 8w) */}
@@ -324,10 +324,10 @@ export default function LSMTreeReadVisualizer() {
                                             {/* 1. Bloom Filter (width: w) */}
                                             <div
                                                 className={`flex-[1] h-full rounded-lg border flex items-center justify-center p-1.5 text-center transition-all duration-300 ${isCurrent && activeSubstep === 'bloom'
-                                                        ? isBloomMiss
-                                                            ? 'border-red-500 bg-red-500/10 text-red-500 font-bold ring-2 ring-red-500/50'
-                                                            : 'border-primary-500 bg-primary-50 dark:bg-primary-950/40 text-primary-500 font-bold ring-2 ring-primary-500/50 scale-105'
-                                                        : 'border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-black text-gray-400'
+                                                    ? isBloomMiss
+                                                        ? 'border-red-500 bg-red-500/10 text-red-500 font-bold ring-2 ring-red-500/50'
+                                                        : 'border-primary-500 bg-primary-50 dark:bg-primary-950/40 text-primary-500 font-bold ring-2 ring-primary-500/50 scale-105'
+                                                    : 'border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-black text-gray-400'
                                                     }`}
                                             >
                                                 <span className="text-[11px] font-bold uppercase font-mono leading-tight">
@@ -338,8 +338,8 @@ export default function LSMTreeReadVisualizer() {
                                             {/* 2. Sparse Index Table (width: w) */}
                                             <div
                                                 className={`flex-[1] h-full rounded-lg border flex items-center justify-center p-1.5 text-center transition-all duration-300 ${isCurrent && activeSubstep === 'index'
-                                                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/40 text-primary-500 font-bold ring-2 ring-primary-500/50 scale-105'
-                                                        : 'border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-black text-gray-400'
+                                                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/40 text-primary-500 font-bold ring-2 ring-primary-500/50 scale-105'
+                                                    : 'border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-black text-gray-400'
                                                     }`}
                                             >
                                                 <span className="text-[11px] font-bold uppercase font-mono leading-tight">
@@ -350,8 +350,8 @@ export default function LSMTreeReadVisualizer() {
                                             {/* 3. Data Sequence (width: 8w, 5 items in L0 / 7 items in L1) */}
                                             <div
                                                 className={`flex-[8] h-full rounded-lg border flex items-center px-3 gap-2 overflow-x-auto no-scrollbar transition-all duration-300 ${isCurrent && activeSubstep === 'data'
-                                                        ? 'border-primary-500/80 bg-primary-50/20 dark:bg-primary-950/20 ring-2 ring-primary-500/50'
-                                                        : 'border-gray-200 dark:border-gray-800 bg-gray-50/30 dark:bg-black'
+                                                    ? 'border-primary-500/80 bg-primary-50/20 dark:bg-primary-950/20 ring-2 ring-primary-500/50'
+                                                    : 'border-gray-200 dark:border-gray-800 bg-gray-50/30 dark:bg-black'
                                                     }`}
                                             >
                                                 {sst.data.map((val) => {
@@ -360,8 +360,8 @@ export default function LSMTreeReadVisualizer() {
                                                         <div
                                                             key={val}
                                                             className={`flex-1 min-w-[52px] h-11 flex items-center justify-center rounded-md border text-sm font-mono font-bold transition-all duration-300 ${isFound
-                                                                    ? 'bg-green-500 border-green-600 text-white scale-110 shadow-lg z-10'
-                                                                    : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-black text-black dark:text-white'
+                                                                ? 'bg-green-500 border-green-600 text-white scale-110 shadow-lg z-10'
+                                                                : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-black text-black dark:text-white'
                                                                 }`}
                                                         >
                                                             <span>K:{val}</span>
@@ -375,8 +375,8 @@ export default function LSMTreeReadVisualizer() {
                                         {/* BOTTOM ROW: Clean Meta Data Footer */}
                                         <div
                                             className={`h-7 border-t flex items-center justify-center px-4 transition-all duration-300 ${isCurrent && activeSubstep === 'footer'
-                                                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/50 text-primary-600 dark:text-primary-400 font-bold'
-                                                    : 'border-gray-200 dark:border-gray-800 bg-gray-100/60 dark:bg-gray-950 text-gray-500 dark:text-gray-400'
+                                                ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/50 text-primary-600 dark:text-primary-400 font-bold'
+                                                : 'border-gray-200 dark:border-gray-800 bg-gray-100/60 dark:bg-gray-950 text-gray-500 dark:text-gray-400'
                                                 }`}
                                         >
                                             <span className="text-xs font-mono font-bold uppercase tracking-widest">

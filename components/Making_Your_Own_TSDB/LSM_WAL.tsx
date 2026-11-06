@@ -68,7 +68,7 @@ const WALTradeoffGraph = () => {
                             {/* VictoriaMetrics */}
                             <circle cx="450" cy="305" r="6" className="fill-white dark:fill-black stroke-primary-600 dark:stroke-primary-400" strokeWidth="3" />
                             <text x="465" y="300" textAnchor="start" className="fill-black dark:fill-white font-bold text-xl">VictoriaMetrics</text>
-                            <text x="465" y="324" textAnchor="start" className="fill-gray-500 dark:fill-gray-400 text-sm font-mono">No WAL / In-Memory</text>
+                            <text x="465" y="324" textAnchor="start" className="fill-gray-500 dark:fill-gray-400 text-sm font-mono">No WAL</text>
                         </g>
 
                     </svg>
