@@ -1,8 +1,8 @@
 {
-  "general": 1,
   "database": 1,
   "storage-system": 1,
-  "cloud": 2,
+  "general": 1,
   "low-level": 2,
-  "operating-systems": 2
+  "operating-systems": 2,
+  "cloud": 2
 }
