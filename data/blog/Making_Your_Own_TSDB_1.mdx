@@ -11,10 +11,10 @@ summary: First part of the building your own time series database series, discus
 
 1. [Background](#background) - Why I wrote this blog
 2. [LSM Tree](#1-lsm-tree) - What an LSM-Tree is
-3. [Why LSM-Tree](#2-why-lsm-tree) - Why it suits write-heavy workloads
-4. [Components](#3-components-of-an-lsm-tree) - Memtable, SSTable, WAL and Compaction
-5. [Write Path](#4-write-path) - How a write flows end-to-end
-6. [Read Path](#5-read-path) - How a read traverses the tree
+3. [Components](#2-components-of-an-lsm-tree) - Memtable, SSTable, WAL and Compaction
+4. [Write Path](#3-write-path) - How a write flows end-to-end
+5. [Read Path](#4-read-path) - How a read traverses the tree
+6. [Why LSM-Tree](#5-why-lsm-tree) - Why it suits write-heavy workloads
 7. [Conclusion](#6-conclusion) - Summary and further reading
 
 ## Background 
@@ -160,7 +160,7 @@ However these descriptions are only introductory. A full article is required to 
 Now that we know how each underlying component of an LSM tree works, it's time we discuss how these parts work together to address read and write queries in an LSM-Tree based storage engine.
 
 
-## 3. Write Flow
+## 3. Write Path
 
 Writes in an LSM-Tree are a multi-step process that roughly follows the following path.
 
@@ -183,7 +183,7 @@ Give it a try.
 <LSM_Write />
 
 
-## 5. Read Flow
+## 4. Read Path
 
 Reads in LSM-Trees are actually quite straightforward once you understand one simple fact - "LSM-Trees are append-only". What this means for reads is that the latest version of any data always lives at the top of the hierarchy. The Memtable holds the most recent writes, Level-0 SSTables hold slightly older data, and as you go deeper into the levels the data gets progressively older. So when we're looking for a key, we start at the top and work our way down. The first match we find is guaranteed to be the latest version, and we stop right there.
 
@@ -222,7 +222,7 @@ Below is a visualization of the Read Path in an LSM-Tree, working on the exact s
 This is the case for point queries looking for a single key. Range queries or aggregations are not this simple as accumulating the correct range of data across multiple SSTables and levels in the fewest possible steps involves more advanced algorithms, and that in itself is a topic worthy of its own article which I'll try to write later.
 
 
-## 6. Why LSM-Tree 
+## 5. Why LSM-Tree 
 
 Now you might be thinking, why LSM-Tree and not B+Tree? after all, B+Trees have been around for decades and power most traditional databases. The answer lies in how each structure handles the fundamental operation of writing data to disk.
 
