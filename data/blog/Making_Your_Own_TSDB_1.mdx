@@ -232,7 +232,7 @@ In an LSM-Tree, writing is effectively equivalent to writing to memory. Here's w
 
 The key trick here is that we maintain a buffer of several empty memtables and don't wait for the flush to complete. Instead, when the current memtable fills up, we replace the active memtable with an empty one while the previous memtable flushes to disk in the background. This ensures that the flushing process does not directly affect the write path, keeping it fast and clean.
 
-#### Sequential vs Random Writes: The Real Differentiator
+#### Sequential vs Random Writes: Why B+ Tree Is Not Suitable
 
 Now both LSM-Trees and B+Trees can perform well on sequential writes when keys arrive in order, because most writes stay in memory and hit the same hot pages. But here's where things diverge: **random writes**.
 
@@ -253,7 +253,7 @@ The cost LSM-Trees pay for this write superiority is a slight compromise on read
 
 However, with some optimizations and implementation tweaks using bloom filters, sparse indexes, and specialized compaction policy, this penalty is quite manageable and often acceptable given the improvements in write performance.
 
-Now for our use case, we should know that Time Series Databases are primarily used for analyzing and ingesting large volumes of timestamped data at an extremely high rate, which means that they are optimized for high write throughput, multiple times these databases accept data from multiple sources which may arrive from different locations or devices, and this means that writes may not be purely sequential or ordered and may be interleaved or out of order due to say network latency or other factors.
+Now for our use case, we should know that Time Series Databases are primarily used for analyzing and ingesting large volumes of timestamped data at an extremely high rate, which means that they are optimized for high write throughput, usually these databases accept data from multiple sources which may arrive from different locations or devices, and this means that writes may not be purely sequential or ordered and may be interleaved or out of order due to say network latency or other factors.
 
 Thats why many popular Time Series and analytical databases often use a variation of LSM-Tree-based storage engines, a few of which are: 
 
