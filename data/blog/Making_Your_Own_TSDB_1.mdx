@@ -46,22 +46,7 @@ Leveraging this, during reads the system could use binary search or indexes to q
 #### 3) Merge
 Because data is written as an append-only log, the system will inevitably end up with multiple versions of the same data spread across different disk files (e.g. an insert in file 1, an update in file 2, and a delete in file 3). To fix this, a background process called compaction takes these separate sorted files and combines them using a merge sort algorithm.
 
-## 2. Why LSM-Tree 
-
-Time series databases are primarily used for analyzing and ingesting large volumes of timestamped data at an extremely high rate without choking. Some applications include storing ticker data for a stock from the financial market or ingesting telemetry data for observability. 
-
-In many use cases, the rate at which this data is produced is extremely fast, and LSM-Tree is a widely recognized data structure for this specific purpose.
-
-Many modern analytical databases often use a variation of LSM-Tree-based storage engines, a few of which are: 
-
- 1. ScyllaDB: Uses a shard-per-core architecture combined with a Log-Structured Merge-tree to maximize performance.
- 2. VictoriaMetrics: A high-performance time series database used for monitoring. Internally it relies on a Merge-Tree-based storage engine which is a variation of LSM-Tree.
- 3. ClickHouse: A fast analytical database which uses Merge-Tree internally as a part of its storage engine.
- 4. RocksDB: Key-Value store built on top of an LSM-Tree based storage engine, developed by Meta for write-heavy scenarios.
- 5. Tigerbeetle: One of the fastest financial OLTP database which uses LSM-Forest (a collection of multiple LSM-Trees) at the core of its storage engine. 
-
-
-## 3. Components of an LSM-Tree
+## 2. Components of an LSM-Tree
 
 Talking about the components, there are several parts which work together to make a functional LSM-Tree, operating across both primary memory and secondary memory as  shown in the illustration below. The core components of an LSM-Tree are its memtable, SSTable, WAL and the compaction algorithm, one-by-one we will take a look at the details of each of these components.
 
@@ -175,7 +160,7 @@ However these descriptions are only introductory. A full article is required to 
 Now that we know how each underlying component of an LSM tree works, it's time we discuss how these parts work together to address read and write queries in an LSM-Tree based storage engine.
 
 
-## 4. Write Path
+## 3. Write Flow
 
 Writes in an LSM-Tree are a multi-step process that roughly follows the following path.
 
@@ -198,7 +183,7 @@ Give it a try.
 <LSM_Write />
 
 
-## 5. Read Path
+## 5. Read Flow
 
 Reads in LSM-Trees are actually quite straightforward once you understand one simple fact - "LSM-Trees are append-only". What this means for reads is that the latest version of any data always lives at the top of the hierarchy. The Memtable holds the most recent writes, Level-0 SSTables hold slightly older data, and as you go deeper into the levels the data gets progressively older. So when we're looking for a key, we start at the top and work our way down. The first match we find is guaranteed to be the latest version, and we stop right there.
 
@@ -237,6 +222,47 @@ Below is a visualization of the Read Path in an LSM-Tree, working on the exact s
 This is the case for point queries looking for a single key. Range queries or aggregations are not this simple as accumulating the correct range of data across multiple SSTables and levels in the fewest possible steps involves more advanced algorithms, and that in itself is a topic worthy of its own article which I'll try to write later.
 
 
+## 6. Why LSM-Tree 
+
+Now you might be thinking, why LSM-Tree and not B+Tree? after all, B+Trees have been around for decades and power most traditional databases. The answer lies in how each structure handles the fundamental operation of writing data to disk.
+
+#### Write Optimization Through IO Amortization
+
+In an LSM-Tree, writing is effectively equivalent to writing to memory. Here's why: when we perform a write, it lands in the memtable (which is in-memory), and the actual cost of flushing this data to disk gets amortized over many subsequent writes. The memtable absorbs writes until it reaches capacity, then a background process handles the flush without blocking new incoming writes.
+
+The key trick here is that we maintain a buffer of several empty memtables and don't wait for the flush to complete. Instead, when the current memtable fills up, we replace the active memtable with an empty one while the previous memtable flushes to disk in the background. This ensures that the flushing process does not directly affect the write path, keeping it fast and clean.
+
+#### Sequential vs Random Writes: The Real Differentiator
+
+Now both LSM-Trees and B+Trees can perform well on sequential writes when keys arrive in order, because most writes stay in memory and hit the same hot pages. But here's where things diverge: **random writes**.
+
+Consider what happens in a B+Tree when you receive random or out-of-order keys:
+
+1. The target node likely lives on a cold page on disk.
+2. The write path **waits** for this page to be fetched into memory.
+3. If the node is full, a **node split** occurs, promoting the median key to the parent.
+4. This split cascades up the tree if parent nodes are also full, all the way to the root.
+5. Each split requires possibly loading and modifying multiple pages, causing **cascading random I/O** across the tree.
+6. A single random write can thus potentially trigger a chain of unpredictable disk accesses, killing throughput.
+
+This is where LSM-Trees outperforms B+ Trees, when random or out-of-order data comes in, it still gets written to the memtable in the exact order it was received, without any interactions with the disk. The write is just an append operation into the in-memory memtable.
+
+But what about the ordering and sequencing of this data? That gets deferred to **compaction**, this process runs asynchronously and handles merging and reordering of SSTables at its own pace, completely independent of the write path. This means the write path remains blazingly fast even when keys arrive completely out of order.
+
+The cost LSM-Trees pay for this write superiority is a slight compromise on reads, since B+ Trees maintain a single organized tree structure where updates and writes happen in place, a specific data exists at a single location, it is hence optimized for range queries and point lookups, whereas LSM-Trees in worst case needs to check multiple levels and SSTables to find the latest version of a key. 
+
+However, with some optimizations and implementation tweaks using bloom filters, sparse indexes, and specialized compaction policy, this penalty is quite manageable and often acceptable given the improvements in write performance.
+
+Now for our use case, we should know that Time Series Databases are primarily used for analyzing and ingesting large volumes of timestamped data at an extremely high rate, which means that they are optimized for high write throughput, multiple times these databases accept data from multiple sources which may arrive from different locations or devices, and this means that writes may not be purely sequential or ordered and may be interleaved or out of order due to say network latency or other factors.
+
+Thats why many popular Time Series and analytical databases often use a variation of LSM-Tree-based storage engines, a few of which are: 
+
+ 1. ScyllaDB: Uses a shard-per-core architecture combined with a Log-Structured Merge-tree to maximize performance.
+ 2. VictoriaMetrics: A high-performance time series database used for monitoring. Internally it relies on a Merge-Tree-based storage engine which is a variation of LSM-Tree.
+ 3. ClickHouse: A fast analytical database which uses Merge-Tree internally as a part of its storage engine.
+ 4. RocksDB: Key-Value store built on top of an LSM-Tree based storage engine, developed by Meta for write-heavy scenarios.
+ 5. Tigerbeetle: One of the fastest financial OLTP database which uses an LSM-Forest (a collection of multiple LSM-Trees) at the core of its storage engine. 
+
 ## 6. Conclusion
 
 At this point we've covered the full internals of an LSM-Tree, how it stores data, how it recovers from crashes, how compaction happens, and how reads and writes actually flow through it. If you've made it this far, you now understand the core of what powers most modern write-heavy databases.
@@ -252,4 +278,3 @@ A few resources I found genuinely useful along the way, in case you want to go d
 Thanks for reading. Here's a fun fact to close out:
 
 *"PostgreSQL originally included a native 'Time Travel' feature that let you query data as it existed at any point in the past, it was removed in 1998 because the database never forgot anything, causing severe data bloat."*
-
