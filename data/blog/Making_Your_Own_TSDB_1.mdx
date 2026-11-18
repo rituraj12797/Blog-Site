@@ -111,7 +111,7 @@ This is a log file in the secondary memory which we use for crash recovery, basi
 
 When the database restarts after a crash, it reads the WAL from the beginning and replays every logged operation in order, rebuilding the Memtable back to the state it was in before the crash. Once replay is complete, the database resumes normal operation as if nothing happened.
 
-But if we are going to flush each operation to WAL before applying it on the memtable isn't it going to affect write throughput ? and the answer is yes. but if a crash ever happens and the memtable was not flushed, we can guarantee recoverability up to the last successful operation so data recoverability/safety here is maximum.
+But if we are going to flush each operation to WAL before applying it on the memtable isn't it going to affect write throughput? The answer is yes, write performance will get impacted, but at the same time, in this case if a crash ever happens and the memtable was not flushed, we can guarantee recoverability up to the last successful operation so data recoverability/safety here is maximum.
 
 This is a tradeoff between performance and data safety guarantee which could be understood from the below table: 
 
@@ -224,7 +224,7 @@ This is the case for point queries looking for a single key. Range queries or ag
 
 ## 5. Why LSM-Tree 
 
-Now you might be thinking, why LSM-Tree and not B+Tree? after all, B+Trees have been around for decades and power most traditional databases. The answer lies in how each structure handles the fundamental operation of writing data to disk.
+Now you might be thinking, why LSM-Tree and not B+Tree? After all, B+Trees have been around for decades and power most traditional databases. The answer lies in how each structure handles the fundamental operation of writing data to disk.
 
 #### Write Optimization Through IO Amortization
 
